@@ -305,11 +305,11 @@ static int cpu_boost_init(void)
 	struct cpu_sync *s;
 
 	struct sched_param param = { .sched_priority = 2 };
-	cpumask_t sys_bg_mask;
+	cpumask_t sys_pf_mask;
 
 	/* Hardcode the cpumask to bind the kthread to it */
-	for (i = 0; i <= 3; i++) {
-		cpumask_set_cpu(i, &sys_bg_mask);
+	for (i = 4; i <= 7; i++) {
+		cpumask_set_cpu(i, &sys_pf_mask);
 	}
 
 	init_kthread_worker(&cpu_boost_worker);
@@ -325,7 +325,7 @@ static int cpu_boost_init(void)
 		pr_err("cpu-boost: Failed to set SCHED_FIFO!\n");
 
 	/* Now bind it to the cpumask */
-	kthread_bind_mask(cpu_boost_worker_thread, &sys_bg_mask);
+	kthread_bind_mask(cpu_boost_worker_thread, &sys_pf_mask);
 
 	/* Wake it up! */
 	wake_up_process(cpu_boost_worker_thread);
