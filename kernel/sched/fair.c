@@ -2893,7 +2893,6 @@ ___update_load_avg(u64 now, int cpu, struct sched_avg *sa,
 	}
 	sa->util_avg = sa->util_sum / LOAD_AVG_MAX;
 
-	cfs_se_util_change(sa);
 	return 1;
 }
 
@@ -2906,9 +2905,14 @@ __update_load_avg_blocked_se(u64 now, int cpu, struct sched_entity *se)
 static int
 __update_load_avg_se(u64 now, int cpu, struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
-	return ___update_load_avg(now, cpu, &se->avg,
+	if (___update_load_avg(now, cpu, &se->avg,
 				  se->on_rq * scale_load_down(se->load.weight),
-				  cfs_rq->curr == se, NULL);
+				  cfs_rq->curr == se, NULL)) {
+		cfs_se_util_change(&se->avg);
+		return 1;
+	}
+
+	return 0;
 }
 
 static int
