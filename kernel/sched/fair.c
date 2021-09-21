@@ -7696,6 +7696,7 @@ enum group_type {
 #define LBF_NEED_BREAK	0x02
 #define LBF_DST_PINNED  0x04
 #define LBF_SOME_PINNED	0x08
+#define LBF_IGNORE_BIG_TASKS 0x100
 
 struct lb_env {
 	struct sched_domain	*sd;
@@ -7866,6 +7867,11 @@ int can_migrate_task(struct task_struct *p, struct lb_env *env)
 	/* Record that we found atleast one task that could run on dst_cpu */
 	env->flags &= ~LBF_ALL_PINNED;
 
+	/* Don't detach task if it doesn't fit on the destination */
+	if (env->flags & LBF_IGNORE_BIG_TASKS &&
+		!task_fits_max(p, env->dst_cpu))
+		return 0;
+
 	if (task_running(env->src_rq, p)) {
 		schedstat_inc(p, se.statistics.nr_failed_migrations_running);
 		return 0;
@@ -7940,6 +7946,11 @@ static struct task_struct *detach_one_task(struct lb_env *env)
 	return NULL;
 }
 
+static inline int cpu_capacity(int cpu)
+{
+	return cpu_rq(cpu)->cpu_capacity;
+}
+
 static const unsigned int sched_nr_migrate_break = 32;
 
 /*
@@ -7954,12 +7965,17 @@ static int detach_tasks(struct lb_env *env)
 	struct task_struct *p;
 	unsigned long load;
 	int detached = 0;
+	int orig_loop = env->loop;
 
 	lockdep_assert_held(&env->src_rq->lock);
 
 	if (env->imbalance <= 0)
 		return 0;
 
+	if (cpu_capacity(env->dst_cpu) < cpu_capacity(env->src_cpu))
+		env->flags |= LBF_IGNORE_BIG_TASKS;
+
+redo:
 	while (!list_empty(tasks)) {
 		/*
 		 * We don't want to steal all, otherwise we may be treated likewise,
@@ -8027,6 +8043,13 @@ static int detach_tasks(struct lb_env *env)
 		continue;
 next:
 		list_move_tail(&p->se.group_node, tasks);
+	}
+
+	if (env->flags & (LBF_IGNORE_BIG_TASKS) && !detached) {
+		tasks = &env->src_rq->cfs_tasks;
+		env->flags &= ~(LBF_IGNORE_BIG_TASKS);
+		env->loop = orig_loop;
+		goto redo;
 	}
 
 	/*
